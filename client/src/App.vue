@@ -9,6 +9,9 @@
         <router-link to="/confess" class="nav-link" :class="{ active: $route.path === '/confess' }">
           倾诉秘密
         </router-link>
+        <router-link to="/admin" class="nav-link nav-link-admin" :class="{ active: $route.path === '/admin' }">
+          管理后台
+        </router-link>
       </nav>
     </header>
     <main class="main">
@@ -52,7 +55,7 @@
 
 .nav {
   display: flex;
-  gap: 30px;
+  gap: 20px;
 }
 
 .nav-link {
@@ -74,11 +77,24 @@
   background: rgba(255, 255, 255, 0.2);
 }
 
+.nav-link-admin {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.nav-link-admin:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.nav-link-admin.active {
+  background: rgba(255, 255, 255, 0.25);
+}
+
 .main {
   flex: 1;
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
   padding: 40px 20px;
 }
 
@@ -87,5 +103,22 @@
   padding: 20px;
   color: rgba(255, 255, 255, 0.7);
   font-size: 14px;
+}
+
+@media (max-width: 640px) {
+  .header {
+    flex-direction: column;
+    gap: 15px;
+    padding: 16px 20px;
+  }
+  .nav {
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .nav-link {
+    font-size: 14px;
+    padding: 6px 12px;
+  }
 }
 </style>
