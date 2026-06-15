@@ -208,12 +208,13 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 
-const ADMIN_TOKEN_KEY = 'admin_token'
+const ADMIN_TOKEN_KEY = 'admin_session_token'
 
 const isLoggedIn = ref(false)
 const passwordInput = ref('')
 const loginError = ref('')
 const loggingIn = ref(false)
+const sessionToken = ref(null)
 
 const stats = ref({
   totalSecrets: 0,
@@ -242,7 +243,7 @@ const updatingReplyId = ref(null)
 function authHeaders() {
   return {
     'Content-Type': 'application/json',
-    'x-admin-password': 'admin123'
+    'x-admin-token': sessionToken.value || ''
   }
 }
 
@@ -287,8 +288,10 @@ async function handleLogin() {
     const data = await response.json()
 
     if (response.ok && data.success) {
-      localStorage.setItem(ADMIN_TOKEN_KEY, 'true')
+      sessionToken.value = data.token
+      localStorage.setItem(ADMIN_TOKEN_KEY, data.token)
       isLoggedIn.value = true
+      passwordInput.value = ''
       await Promise.all([fetchStats(), fetchSecrets()])
     } else {
       loginError.value = data.error || '登录失败，请检查密码'
@@ -301,8 +304,17 @@ async function handleLogin() {
   }
 }
 
-function handleLogout() {
+async function handleLogout() {
+  try {
+    await fetch('/api/admin/logout', {
+      method: 'POST',
+      headers: authHeaders()
+    })
+  } catch (e) {
+    // ignore
+  }
   localStorage.removeItem(ADMIN_TOKEN_KEY)
+  sessionToken.value = null
   isLoggedIn.value = false
   passwordInput.value = ''
   loginError.value = ''
@@ -316,6 +328,10 @@ async function fetchStats() {
     const response = await fetch('/api/admin/stats', {
       headers: authHeaders()
     })
+    if (response.status === 401) {
+      forceLogout()
+      return
+    }
     const data = await response.json()
     if (data.success) {
       stats.value = data.stats
@@ -331,6 +347,10 @@ async function fetchSecrets() {
     const response = await fetch('/api/admin/secrets', {
       headers: authHeaders()
     })
+    if (response.status === 401) {
+      forceLogout()
+      return
+    }
     const data = await response.json()
     if (data.success) {
       secrets.value = data.secrets
@@ -368,6 +388,10 @@ async function fetchReplies() {
     const response = await fetch(url.toString(), {
       headers: authHeaders()
     })
+    if (response.status === 401) {
+      forceLogout()
+      return
+    }
     const data = await response.json()
     if (data.success) {
       replies.value = data.replies
@@ -387,6 +411,10 @@ async function updateReplyStatus(replyId, newStatus) {
       headers: authHeaders(),
       body: JSON.stringify({ status: newStatus })
     })
+    if (response.status === 401) {
+      forceLogout()
+      return
+    }
     const data = await response.json()
     if (data.success) {
       await Promise.all([fetchStats(), fetchSecrets(), fetchReplies()])
@@ -401,11 +429,40 @@ async function updateReplyStatus(replyId, newStatus) {
   }
 }
 
-onMounted(() => {
-  if (localStorage.getItem(ADMIN_TOKEN_KEY)) {
-    isLoggedIn.value = true
-    Promise.all([fetchStats(), fetchSecrets()])
+function forceLogout() {
+  localStorage.removeItem(ADMIN_TOKEN_KEY)
+  sessionToken.value = null
+  isLoggedIn.value = false
+  loginError.value = '会话已过期，请重新登录'
+  secrets.value = []
+  replies.value = []
+  selectedSecretId.value = ''
+}
+
+async function verifyAndRestore() {
+  const savedToken = localStorage.getItem(ADMIN_TOKEN_KEY)
+  if (!savedToken) return
+
+  sessionToken.value = savedToken
+  try {
+    const response = await fetch('/api/admin/verify', {
+      headers: authHeaders()
+    })
+    if (response.ok) {
+      isLoggedIn.value = true
+      await Promise.all([fetchStats(), fetchSecrets()])
+    } else {
+      localStorage.removeItem(ADMIN_TOKEN_KEY)
+      sessionToken.value = null
+    }
+  } catch (error) {
+    localStorage.removeItem(ADMIN_TOKEN_KEY)
+    sessionToken.value = null
   }
+}
+
+onMounted(() => {
+  verifyAndRestore()
 })
 </script>
 

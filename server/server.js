@@ -18,6 +18,38 @@ const REPLY_STATUS = {
 };
 
 const ADMIN_PASSWORD = 'admin123';
+const SESSION_TTL = 2 * 60 * 60 * 1000;
+const sessions = new Map();
+
+function createSession() {
+  const token = uuidv4() + uuidv4();
+  sessions.set(token, { createdAt: Date.now() });
+  return token;
+}
+
+function isValidSession(token) {
+  if (!token) return false;
+  const session = sessions.get(token);
+  if (!session) return false;
+  if (Date.now() - session.createdAt > SESSION_TTL) {
+    sessions.delete(token);
+    return false;
+  }
+  return true;
+}
+
+function destroySession(token) {
+  if (token) sessions.delete(token);
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, session] of sessions) {
+    if (now - session.createdAt > SESSION_TTL) {
+      sessions.delete(token);
+    }
+  }
+}, 10 * 60 * 1000);
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -53,9 +85,9 @@ function writeReplies(replies) {
 }
 
 function verifyAuth(req, res, next) {
-  const authHeader = req.headers['x-admin-password'];
-  if (authHeader !== ADMIN_PASSWORD) {
-    return res.status(401).json({ error: '未授权的访问' });
+  const token = req.headers['x-admin-token'];
+  if (!isValidSession(token)) {
+    return res.status(401).json({ error: '未授权的访问，请重新登录' });
   }
   next();
 }
@@ -191,7 +223,8 @@ app.post('/api/admin/login', (req, res) => {
   try {
     const { password } = req.body;
     if (password === ADMIN_PASSWORD) {
-      res.json({ success: true, message: '登录成功' });
+      const token = createSession();
+      res.json({ success: true, message: '登录成功', token });
     } else {
       res.status(401).json({ success: false, error: '密码错误' });
     }
@@ -199,6 +232,16 @@ app.post('/api/admin/login', (req, res) => {
     console.error('登录时出错:', error);
     res.status(500).json({ error: '服务器内部错误' });
   }
+});
+
+app.post('/api/admin/logout', (req, res) => {
+  const token = req.headers['x-admin-token'];
+  destroySession(token);
+  res.json({ success: true });
+});
+
+app.get('/api/admin/verify', verifyAuth, (req, res) => {
+  res.json({ success: true });
 });
 
 app.get('/api/admin/secrets', verifyAuth, (req, res) => {
